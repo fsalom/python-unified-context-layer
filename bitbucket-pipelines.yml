@@ -1,0 +1,166 @@
+# You can't use several yml to build a single pipeline. Each repo uses only one yml
+# The workaround is to split your logic between several sh scripts
+# https://community.atlassian.com/t5/Bitbucket-questions/Can-bitbucket-pipeline-yml-refer-another-yml-file/qaq-p/1346283
+
+
+definitions:
+  steps:
+    - step: &install_docker_and_docker_compose_step
+        name: Install Docker and Docker Compose
+        script: &install_docker_and_docker_compose_script
+          - pipe: atlassian/ssh-run:0.8.1
+            variables: &install_docker_and_docker_compose_variables
+              SSH_USER: $SSH_USER
+              SERVER: $SERVER
+              COMMAND: |
+                if command -v docker &> /dev/null; then
+                  echo "Docker already installed"
+                  rm get-docker.sh
+                else
+                  echo "Installing Docker"
+                  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+                  yes '' | sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+                  sudo apt-get update
+                  sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+                  sudo usermod -aG docker $SSH_USER
+                fi
+                docker --version
+                if command -v docker-compose &> /dev/null; then
+                  echo "Docker compose already installed"
+                else
+                  echo "Installing Docker Compose"
+                  sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                  sudo chmod +x /usr/local/bin/docker-compose
+                fi
+                docker-compose --version
+    - step: &build_and_push_docker_image_step
+        name: Build and push docker image to Docker Hub
+        script:
+          - docker login -u $DOCKER_HUB_ID -p $DOCKER_HUB_PASSWORD
+          - docker build -t $DOCKER_HUB_REPO/python:3.12.0 -f .docker/app/Dockerfile .
+          - docker push $DOCKER_HUB_REPO/python:3.12.0
+    - step: &clone_repo_step
+        name: Clone repository
+        script: &clone_repo_script
+          - pipe: atlassian/ssh-run:0.8.1
+            variables: &clone_repo_variables
+              SSH_USER: $SSH_USER
+              SERVER: $SERVER
+              REPO_ACCESS_TOKEN: $REPO_ACCESS_TOKEN
+    - step: &run_tests_and_check_coverage_step
+        name: Run tests and check coverage of each module
+        image: python:3.12.0
+        caches:
+          - pip
+        script:
+          - pip install poetry
+          - poetry export -f requirements.txt --without-hashes -o requirements.txt
+          - pip install -r requirements.txt
+          - source scripts/checks.sh
+    - step: &deploy_step
+        name: Deploy code
+        script: &deploy_script
+          - pipe: atlassian/ssh-run:0.8.1
+            variables: &deploy_script_variables
+              SSH_USER: $SSH_USER
+              SERVER: $SERVER
+              COMMONS_ACCESS_TOKEN: $COMMONS_ACCESS_TOKEN
+              CHATBOT_ACCESS_TOKEN: $CHATBOT_ACCESS_TOKEN
+              FCM_ACCESS_TOKEN: $FCM_ACCESS_TOKEN
+
+    - step: &remove_code_from_droplet_step
+        name: Remove code from droplet
+        script: &remove_code_from_droplet_script
+          - pipe: atlassian/ssh-run:0.8.1
+            variables: &remove_code_from_droplet_variables
+              SSH_USER: $SSH_USER
+              SERVER: $SERVER
+
+image: atlassian/default-image:latest
+
+pipelines:
+  branches:
+    main:
+      - step:
+          <<: *install_docker_and_docker_compose_step
+          script:
+            - <<: *install_docker_and_docker_compose_script
+              variables:
+                <<: *install_docker_and_docker_compose_variables
+                SERVER: $PRODUCTION_SERVER_IP
+      - step:
+          <<: *clone_repo_step
+          script:
+            - <<: *clone_repo_script
+              variables:
+                <<: *clone_repo_variables
+                SERVER: $PRODUCTION_SERVER_IP
+                COMMAND: |
+                  git clone git@bitbucket.org:rudoapps/users-microservice-python.git || exit 0
+      # - step: *run_tests_and_check_coverage_step
+      - step:
+          <<: *deploy_step
+          script:
+            - <<: *deploy_script
+              variables:
+                <<: *deploy_script_variables
+                SERVER: $PRODUCTION_SERVER_IP
+                COMMAND: |
+                  cd users-microservice-python
+                  git checkout main
+                  source ./scripts/run_deploy.sh users-microservice-python main users-pro.yml $COMMONS_ACCESS_TOKEN $CHATBOT_ACCESS_TOKEN $FCM_ACCESS_TOKEN
+      - step:
+          <<: *remove_code_from_droplet_step
+          script:
+            - <<: *remove_code_from_droplet_script
+              variables:
+                <<: *remove_code_from_droplet_variables
+                SERVER: $PRODUCTION_SERVER_IP
+                COMMAND: |
+                  rm -rf users-microservice-python
+
+    develop:
+      - step:
+          <<: *install_docker_and_docker_compose_step
+          script:
+            - <<: *install_docker_and_docker_compose_script
+              variables:
+                <<: *install_docker_and_docker_compose_variables
+                SERVER: $STAGING_SERVER_IP
+      - step:
+          <<: *clone_repo_step
+          script:
+            - <<: *clone_repo_script
+              variables:
+                <<: *clone_repo_variables
+                SERVER: $STAGING_SERVER_IP
+                REPO_ACCESS_TOKEN: $REPO_ACCESS_TOKEN
+                COMMAND: |
+                  git clone https://x-token-auth:$REPO_ACCESS_TOKEN@bitbucket.org/rudoapps/users-microservice-python.git || exit 0
+      #- step: *run_tests_and_check_coverage_step
+      - step:
+          <<: *deploy_step
+          script:
+            - <<: *deploy_script
+              variables:
+                <<: *deploy_script_variables
+                SERVER: $STAGING_SERVER_IP
+                COMMONS_ACCESS_TOKEN: $COMMONS_ACCESS_TOKEN
+                CHATBOT_ACCESS_TOKEN: $CHATBOT_ACCESS_TOKEN
+                FCM_ACCESS_TOKEN: $FCM_ACCESS_TOKEN
+                COMMAND: |
+                  cd users-microservice-python
+                  git checkout develop
+                  source ./scripts/run_deploy.sh users-microservice-python develop users-pro.yml $COMMONS_ACCESS_TOKEN $CHATBOT_ACCESS_TOKEN $FCM_ACCESS_TOKEN
+      - step:
+          <<: *remove_code_from_droplet_step
+          script:
+            - <<: *remove_code_from_droplet_script
+              variables:
+                <<: *remove_code_from_droplet_variables
+                SERVER: $STAGING_SERVER_IP
+                COMMAND: |
+                  rm -rf users-microservice-python
+
+options:
+  docker: true
