@@ -33,16 +33,49 @@ class DomainContext:
 
 
 @dataclass
+class GlobalContext:
+    """Global context shared across all AI platforms"""
+    id: str = field(default_factory=lambda: str(uuid4()))
+    project_id: str = ""
+    shared_knowledge: Dict[str, Any] = field(default_factory=dict)
+    shared_conventions: Dict[str, Any] = field(default_factory=dict)
+    shared_resources: List[Dict[str, Any]] = field(default_factory=list)
+    common_patterns: List[str] = field(default_factory=list)
+    cross_platform_insights: Dict[str, Any] = field(default_factory=dict)
+    last_updated: datetime = field(default_factory=datetime.utcnow)
+    version: int = 1
+
+
+@dataclass
+class PlatformContext:
+    """Individual context for specific AI platform"""
+    id: str = field(default_factory=lambda: str(uuid4()))
+    platform_type: str = ""  # "claude", "chatgpt", "copilot", "custom"
+    project_id: str = ""
+    global_context_id: str = ""
+    platform_specific_data: Dict[str, Any] = field(default_factory=dict)
+    learned_preferences: Dict[str, Any] = field(default_factory=dict)
+    interaction_history: List[Dict[str, Any]] = field(default_factory=list)
+    custom_prompts: List[str] = field(default_factory=list)
+    platform_conventions: Dict[str, Any] = field(default_factory=dict)
+    performance_metrics: Dict[str, Any] = field(default_factory=dict)
+    last_updated: datetime = field(default_factory=datetime.utcnow)
+    version: int = 1
+
+
+@dataclass
 class AISession:
     """AI session tracking"""
     id: str = field(default_factory=lambda: str(uuid4()))
     ai_type: str = ""  # "claude", "chatgpt", "copilot", "custom"
+    platform_context_id: Optional[str] = None
     session_start: datetime = field(default_factory=datetime.utcnow)
     session_end: Optional[datetime] = None
     domains_accessed: List[str] = field(default_factory=list)
     queries_count: int = 0
     last_query: Optional[str] = None
     context_hash: Optional[str] = None
+    accessed_global_context: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -78,6 +111,9 @@ class ProjectContext:
     project_metadata: ProjectMetadata = field(default_factory=ProjectMetadata)
     domains: List[DomainContext] = field(default_factory=list)
     ai_sessions: List[AISession] = field(default_factory=list)
+    global_context_id: Optional[str] = None
+    platform_contexts: List[str] = field(default_factory=list)  # IDs of platform contexts
+    # Deprecated: use global_context_id instead
     global_context: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
     last_updated: datetime = field(default_factory=datetime.utcnow)
@@ -113,3 +149,19 @@ class ProjectContext:
         if session and session.session_end is None:
             session.session_end = datetime.utcnow()
         return session
+
+    def add_platform_context(self, platform_context_id: str) -> None:
+        """Add platform context ID to project"""
+        if platform_context_id not in self.platform_contexts:
+            self.platform_contexts.append(platform_context_id)
+            self.last_updated = datetime.utcnow()
+
+    def remove_platform_context(self, platform_context_id: str) -> None:
+        """Remove platform context from project"""
+        if platform_context_id in self.platform_contexts:
+            self.platform_contexts.remove(platform_context_id)
+            self.last_updated = datetime.utcnow()
+
+    def get_platform_contexts_by_type(self, ai_type: str) -> List[str]:
+        """Get platform context IDs for specific AI type"""
+        return [ctx_id for ctx_id in self.platform_contexts]  # TODO: filter by type
