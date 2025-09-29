@@ -8,7 +8,9 @@ from domain.entities.project_context import (
     DomainContext,
     AISession,
     ContextQuery,
-    ContextResponse
+    ContextResponse,
+    GlobalContext,
+    PlatformContext
 )
 
 
@@ -175,4 +177,104 @@ class ContextQueryRepositoryPort(ABC):
         limit: Optional[int] = None
     ) -> List[ContextQuery]:
         """Search queries by text"""
+        pass
+
+
+class GlobalContextRepositoryPort(ABC):
+    """Repository interface for global context operations"""
+
+    @abstractmethod
+    async def create_global_context(self, context: GlobalContext) -> GlobalContext:
+        """Create a new global context"""
+        pass
+
+    @abstractmethod
+    async def get_global_context(self, context_id: str) -> Optional[GlobalContext]:
+        """Get global context by ID"""
+        pass
+
+    @abstractmethod
+    async def get_global_context_by_project(self, project_id: str) -> Optional[GlobalContext]:
+        """Get global context by project ID"""
+        pass
+
+    @abstractmethod
+    async def update_global_context(self, context: GlobalContext) -> GlobalContext:
+        """Update global context"""
+        pass
+
+    @abstractmethod
+    async def delete_global_context(self, context_id: str) -> bool:
+        """Delete global context"""
+        pass
+
+    @abstractmethod
+    async def merge_insights_to_global(
+        self,
+        context_id: str,
+        insights: Dict[str, Any],
+        source_platform: str
+    ) -> bool:
+        """Merge insights from platform to global context"""
+        pass
+
+
+class PlatformContextRepositoryPort(ABC):
+    """Repository interface for platform-specific context operations"""
+
+    @abstractmethod
+    async def create_platform_context(self, context: PlatformContext) -> PlatformContext:
+        """Create a new platform context"""
+        pass
+
+    @abstractmethod
+    async def get_platform_context(self, context_id: str) -> Optional[PlatformContext]:
+        """Get platform context by ID"""
+        pass
+
+    @abstractmethod
+    async def get_platform_contexts_by_project(self, project_id: str) -> List[PlatformContext]:
+        """Get all platform contexts for a project"""
+        pass
+
+    @abstractmethod
+    async def get_platform_context_by_type(
+        self,
+        project_id: str,
+        platform_type: str
+    ) -> Optional[PlatformContext]:
+        """Get platform context by type for a project"""
+        pass
+
+    @abstractmethod
+    async def update_platform_context(self, context: PlatformContext) -> PlatformContext:
+        """Update platform context"""
+        pass
+
+    @abstractmethod
+    async def delete_platform_context(self, context_id: str) -> bool:
+        """Delete platform context"""
+        pass
+
+    @abstractmethod
+    async def add_interaction_to_history(
+        self,
+        context_id: str,
+        interaction: Dict[str, Any]
+    ) -> bool:
+        """Add interaction to platform context history"""
+        pass
+
+    @abstractmethod
+    async def update_learned_preferences(
+        self,
+        context_id: str,
+        preferences: Dict[str, Any]
+    ) -> bool:
+        """Update learned preferences for platform"""
+        pass
+
+    @abstractmethod
+    async def get_performance_metrics(self, context_id: str) -> Dict[str, Any]:
+        """Get performance metrics for platform context"""
         pass

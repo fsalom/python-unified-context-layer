@@ -26,7 +26,16 @@ from .schemas import (
     AIAnalyticsResponse,
     CollaborationInsightsResponse,
     ErrorResponse,
-    SuccessResponse
+    SuccessResponse,
+    GlobalContextCreate,
+    GlobalContextUpdate,
+    GlobalContextResponse,
+    PlatformContextCreate,
+    PlatformContextUpdate,
+    PlatformContextResponse,
+    InteractionCreate,
+    ContextQueryWithHierarchy,
+    MergeInsightsRequest
 )
 
 logger = logging.getLogger(__name__)
@@ -452,6 +461,220 @@ class ContextAdapter:
             processing_time_ms=response.processing_time_ms,
             metadata=response.metadata,
             timestamp=response.timestamp
+        )
+
+    # Global Context Endpoints
+
+    @router.get("/projects/{project_id}/global-context", response_model=GlobalContextResponse)
+    async def get_global_context(
+        self,
+        project_id: str,
+        context_service: ContextService = Depends()
+    ):
+        """Get global context for project"""
+        global_context = await context_service.get_global_context(project_id)
+        if not global_context:
+            raise HTTPException(status_code=404, detail="Global context not found")
+        return self._global_context_to_response(global_context)
+
+    @router.put("/projects/{project_id}/global-context", response_model=GlobalContextResponse)
+    async def update_global_context(
+        self,
+        project_id: str,
+        request: GlobalContextUpdate,
+        context_service: ContextService = Depends()
+    ):
+        """Update global context"""
+        try:
+            updated_context = await context_service.update_global_context(
+                project_id=project_id,
+                shared_knowledge=request.shared_knowledge,
+                shared_conventions=request.shared_conventions,
+                common_patterns=request.common_patterns
+            )
+            if not updated_context:
+                raise HTTPException(status_code=404, detail="Global context not found")
+            return self._global_context_to_response(updated_context)
+        except Exception as e:
+            logger.error(f"Error updating global context: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/projects/{project_id}/global-context/merge-insights", response_model=SuccessResponse)
+    async def merge_insights_to_global(
+        self,
+        project_id: str,
+        request: MergeInsightsRequest,
+        context_service: ContextService = Depends()
+    ):
+        """Merge insights from platform to global context"""
+        try:
+            success = await context_service.merge_platform_insights_to_global(
+                project_id=project_id,
+                insights=request.insights,
+                source_platform=request.source_platform.value
+            )
+            return SuccessResponse(
+                success=success,
+                message="Insights merged successfully" if success else "Failed to merge insights"
+            )
+        except Exception as e:
+            logger.error(f"Error merging insights: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Platform Context Endpoints
+
+    @router.post("/projects/{project_id}/platform-contexts", response_model=PlatformContextResponse)
+    async def create_platform_context(
+        self,
+        project_id: str,
+        request: PlatformContextCreate,
+        context_service: ContextService = Depends()
+    ):
+        """Create platform-specific context"""
+        try:
+            platform_context = await context_service.create_platform_context(
+                project_id=project_id,
+                platform_type=request.platform_type.value,
+                metadata={
+                    "platform_specific_data": request.platform_specific_data,
+                    "learned_preferences": request.learned_preferences,
+                    "custom_prompts": request.custom_prompts,
+                    "platform_conventions": request.platform_conventions
+                }
+            )
+            return self._platform_context_to_response(platform_context)
+        except Exception as e:
+            logger.error(f"Error creating platform context: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.get("/projects/{project_id}/platform-contexts", response_model=List[PlatformContextResponse])
+    async def get_platform_contexts(
+        self,
+        project_id: str,
+        context_service: ContextService = Depends()
+    ):
+        """Get all platform contexts for project"""
+        contexts = await context_service.get_platform_contexts_for_project(project_id)
+        return [self._platform_context_to_response(ctx) for ctx in contexts]
+
+    @router.get("/projects/{project_id}/platform-contexts/{platform_type}", response_model=PlatformContextResponse)
+    async def get_platform_context_by_type(
+        self,
+        project_id: str,
+        platform_type: str,
+        context_service: ContextService = Depends()
+    ):
+        """Get platform context by type"""
+        context = await context_service.get_platform_context(project_id, platform_type)
+        if not context:
+            raise HTTPException(status_code=404, detail="Platform context not found")
+        return self._platform_context_to_response(context)
+
+    @router.put("/platform-contexts/{context_id}", response_model=PlatformContextResponse)
+    async def update_platform_context(
+        self,
+        context_id: str,
+        request: PlatformContextUpdate,
+        context_service: ContextService = Depends()
+    ):
+        """Update platform context"""
+        try:
+            updated_context = await context_service.update_platform_context(
+                context_id=context_id,
+                learned_preferences=request.learned_preferences,
+                custom_prompts=request.custom_prompts,
+                platform_conventions=request.platform_conventions
+            )
+            if not updated_context:
+                raise HTTPException(status_code=404, detail="Platform context not found")
+            return self._platform_context_to_response(updated_context)
+        except Exception as e:
+            logger.error(f"Error updating platform context: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/platform-contexts/{context_id}/interactions", response_model=SuccessResponse)
+    async def add_interaction(
+        self,
+        context_id: str,
+        request: InteractionCreate,
+        context_service: ContextService = Depends()
+    ):
+        """Add interaction to platform context history"""
+        try:
+            interaction = {
+                "type": request.interaction_type,
+                "content": request.content,
+                "metadata": request.metadata
+            }
+            success = await context_service.add_interaction_to_platform_history(
+                context_id, interaction
+            )
+            return SuccessResponse(
+                success=success,
+                message="Interaction added successfully" if success else "Failed to add interaction"
+            )
+        except Exception as e:
+            logger.error(f"Error adding interaction: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Hierarchical Query Endpoint
+
+    @router.post("/projects/{project_id}/query-hierarchy", response_model=ContextQueryResponse)
+    async def query_context_with_hierarchy(
+        self,
+        project_id: str,
+        request: ContextQueryWithHierarchy,
+        context_service: ContextService = Depends()
+    ):
+        """Query context with global and platform hierarchy"""
+        try:
+            domains_filter = [domain.value for domain in request.domains_filter] if request.domains_filter else None
+
+            response = await context_service.query_context_with_hierarchy(
+                project_id=project_id,
+                platform_type=request.platform_type.value,
+                query_text=request.query_text,
+                include_global=request.include_global,
+                include_platform=request.include_platform,
+                domains_filter=domains_filter,
+                max_results=request.max_results
+            )
+            return self._context_response_to_response(response)
+        except Exception as e:
+            logger.error(f"Error querying hierarchical context: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Helper methods for new response conversion
+
+    def _global_context_to_response(self, context) -> GlobalContextResponse:
+        """Convert global context entity to response"""
+        return GlobalContextResponse(
+            id=context.id,
+            project_id=context.project_id,
+            shared_knowledge=context.shared_knowledge,
+            shared_conventions=context.shared_conventions,
+            shared_resources=context.shared_resources,
+            common_patterns=context.common_patterns,
+            cross_platform_insights=context.cross_platform_insights,
+            last_updated=context.last_updated,
+            version=context.version
+        )
+
+    def _platform_context_to_response(self, context) -> PlatformContextResponse:
+        """Convert platform context entity to response"""
+        return PlatformContextResponse(
+            id=context.id,
+            platform_type=context.platform_type,
+            project_id=context.project_id,
+            global_context_id=context.global_context_id,
+            platform_specific_data=context.platform_specific_data,
+            learned_preferences=context.learned_preferences,
+            interaction_history=context.interaction_history,
+            custom_prompts=context.custom_prompts,
+            platform_conventions=context.platform_conventions,
+            performance_metrics=context.performance_metrics,
+            last_updated=context.last_updated,
+            version=context.version
         )
 
 

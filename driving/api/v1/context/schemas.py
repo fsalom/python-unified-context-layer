@@ -42,6 +42,14 @@ class ResponseFormat(str, Enum):
     TEXT = "text"
 
 
+class ContextScope(str, Enum):
+    """Context scope types"""
+    GLOBAL = "global"
+    PLATFORM = "platform"
+    DOMAIN = "domain"
+    ALL = "all"
+
+
 # Project Context Schemas
 
 class ProjectMetadataCreate(BaseModel):
@@ -227,6 +235,102 @@ class AISubscriptionResponse(BaseModel):
     project_id: str
     domains: List[str]
     created_at: datetime
+
+
+# Global Context Schemas
+
+class GlobalContextCreate(BaseModel):
+    """Schema for creating global context"""
+    project_id: str
+    shared_knowledge: Dict[str, Any] = Field(default_factory=dict)
+    shared_conventions: Dict[str, Any] = Field(default_factory=dict)
+    shared_resources: List[Dict[str, Any]] = Field(default_factory=list)
+    common_patterns: List[str] = Field(default_factory=list)
+
+
+class GlobalContextUpdate(BaseModel):
+    """Schema for updating global context"""
+    shared_knowledge: Optional[Dict[str, Any]] = None
+    shared_conventions: Optional[Dict[str, Any]] = None
+    shared_resources: Optional[List[Dict[str, Any]]] = None
+    common_patterns: Optional[List[str]] = None
+    cross_platform_insights: Optional[Dict[str, Any]] = None
+
+
+class GlobalContextResponse(BaseModel):
+    """Schema for global context response"""
+    id: str
+    project_id: str
+    shared_knowledge: Dict[str, Any]
+    shared_conventions: Dict[str, Any]
+    shared_resources: List[Dict[str, Any]]
+    common_patterns: List[str]
+    cross_platform_insights: Dict[str, Any]
+    last_updated: datetime
+    version: int
+
+
+# Platform Context Schemas
+
+class PlatformContextCreate(BaseModel):
+    """Schema for creating platform context"""
+    platform_type: AIType
+    platform_specific_data: Dict[str, Any] = Field(default_factory=dict)
+    learned_preferences: Dict[str, Any] = Field(default_factory=dict)
+    custom_prompts: List[str] = Field(default_factory=list)
+    platform_conventions: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlatformContextUpdate(BaseModel):
+    """Schema for updating platform context"""
+    platform_specific_data: Optional[Dict[str, Any]] = None
+    learned_preferences: Optional[Dict[str, Any]] = None
+    custom_prompts: Optional[List[str]] = None
+    platform_conventions: Optional[Dict[str, Any]] = None
+    performance_metrics: Optional[Dict[str, Any]] = None
+
+
+class PlatformContextResponse(BaseModel):
+    """Schema for platform context response"""
+    id: str
+    platform_type: str
+    project_id: str
+    global_context_id: str
+    platform_specific_data: Dict[str, Any]
+    learned_preferences: Dict[str, Any]
+    interaction_history: List[Dict[str, Any]]
+    custom_prompts: List[str]
+    platform_conventions: Dict[str, Any]
+    performance_metrics: Dict[str, Any]
+    last_updated: datetime
+    version: int
+
+
+class InteractionCreate(BaseModel):
+    """Schema for creating interaction"""
+    interaction_type: str = Field(..., description="Type of interaction (query, response, action)")
+    content: Dict[str, Any]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextQueryWithHierarchy(BaseModel):
+    """Schema for hierarchical context query"""
+    query_text: str = Field(..., min_length=1)
+    platform_type: AIType
+    include_global: bool = True
+    include_platform: bool = True
+    include_domains: bool = True
+    domains_filter: Optional[List[DomainType]] = None
+    response_format: ResponseFormat = ResponseFormat.STRUCTURED
+    max_results: int = Field(default=100, ge=1, le=1000)
+
+
+class MergeInsightsRequest(BaseModel):
+    """Schema for merging insights to global context"""
+    insights: Dict[str, Any]
+    source_platform: AIType
+    confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 # Analytics Schemas
