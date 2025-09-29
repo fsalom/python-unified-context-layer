@@ -10,13 +10,17 @@ from domain.entities.project_context import (
     AISession,
     ContextQuery,
     ContextResponse,
-    ProjectMetadata
+    ProjectMetadata,
+    GlobalContext,
+    PlatformContext
 )
 from application.ports.context_repository import (
     ContextRepositoryPort,
     DomainContextRepositoryPort,
     AISessionRepositoryPort,
-    ContextQueryRepositoryPort
+    ContextQueryRepositoryPort,
+    GlobalContextRepositoryPort,
+    PlatformContextRepositoryPort
 )
 from application.ports.ai_adapter_port import VectorStorePort, IndexerPort
 
@@ -30,6 +34,8 @@ class ContextService:
         domain_repo: DomainContextRepositoryPort,
         session_repo: AISessionRepositoryPort,
         query_repo: ContextQueryRepositoryPort,
+        global_context_repo: GlobalContextRepositoryPort,
+        platform_context_repo: PlatformContextRepositoryPort,
         vector_store: Optional[VectorStorePort] = None,
         indexer: Optional[IndexerPort] = None
     ):
@@ -37,6 +43,8 @@ class ContextService:
         self._domain_repo = domain_repo
         self._session_repo = session_repo
         self._query_repo = query_repo
+        self._global_context_repo = global_context_repo
+        self._platform_context_repo = platform_context_repo
         self._vector_store = vector_store
         self._indexer = indexer
 
@@ -56,6 +64,22 @@ class ContextService:
         )
 
         context = ProjectContext(project_metadata=metadata)
+
+        # Create global context for this project
+        global_context = GlobalContext(
+            project_id=context.id,
+            shared_knowledge={
+                "project_info": {
+                    "name": name,
+                    "description": description,
+                    "technologies": technologies or [],
+                    "repository_url": repository_url
+                }
+            }
+        )
+        created_global_context = await self._global_context_repo.create_global_context(global_context)
+        context.global_context_id = created_global_context.id
+
         return await self._context_repo.create_project_context(context)
 
     async def get_project_context(self, project_id: str) -> Optional[ProjectContext]:
@@ -354,3 +378,281 @@ class ContextService:
         for session in sessions:
             groups[session.ai_type] = groups.get(session.ai_type, 0) + 1
         return groups
+
+    # Global Context Methods
+
+    async def get_global_context(self, project_id: str) -> Optional[GlobalContext]:
+        """Get global context for project"""
+        return await self._global_context_repo.get_global_context_by_project(project_id)
+
+    async def update_global_context(
+        self,
+        project_id: str,
+        shared_knowledge: Optional[Dict[str, Any]] = None,
+        shared_conventions: Optional[Dict[str, Any]] = None,
+        common_patterns: Optional[List[str]] = None
+    ) -> Optional[GlobalContext]:
+        """Update global context"""
+        global_context = await self._global_context_repo.get_global_context_by_project(project_id)
+        if not global_context:
+            return None
+
+        if shared_knowledge:
+            global_context.shared_knowledge.update(shared_knowledge)
+        if shared_conventions:
+            global_context.shared_conventions.update(shared_conventions)
+        if common_patterns:
+            global_context.common_patterns.extend(common_patterns)
+
+        global_context.version += 1
+        global_context.last_updated = datetime.utcnow()
+
+        return await self._global_context_repo.update_global_context(global_context)
+
+    async def merge_platform_insights_to_global(
+        self,
+        project_id: str,
+        insights: Dict[str, Any],
+        source_platform: str
+    ) -> bool:
+        """Merge insights from platform context to global context"""
+        global_context = await self._global_context_repo.get_global_context_by_project(project_id)
+        if not global_context:
+            return False
+
+        return await self._global_context_repo.merge_insights_to_global(
+            global_context.id, insights, source_platform
+        )
+
+    # Platform Context Methods
+
+    async def create_platform_context(
+        self,
+        project_id: str,
+        platform_type: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> PlatformContext:
+        """Create platform-specific context"""
+        # Get global context
+        global_context = await self._global_context_repo.get_global_context_by_project(project_id)
+        if not global_context:
+            raise ValueError(f"No global context found for project {project_id}")
+
+        platform_context = PlatformContext(
+            platform_type=platform_type,
+            project_id=project_id,
+            global_context_id=global_context.id,
+            platform_specific_data=metadata or {}
+        )
+
+        created_context = await self._platform_context_repo.create_platform_context(platform_context)
+
+        # Add to project
+        project_context = await self._context_repo.get_project_context(project_id)
+        if project_context:
+            project_context.add_platform_context(created_context.id)
+            await self._context_repo.update_project_context(project_context)
+
+        return created_context
+
+    async def get_platform_context(
+        self,
+        project_id: str,
+        platform_type: str
+    ) -> Optional[PlatformContext]:
+        """Get platform context by type"""
+        return await self._platform_context_repo.get_platform_context_by_type(
+            project_id, platform_type
+        )
+
+    async def update_platform_context(
+        self,
+        context_id: str,
+        learned_preferences: Optional[Dict[str, Any]] = None,
+        custom_prompts: Optional[List[str]] = None,
+        platform_conventions: Optional[Dict[str, Any]] = None
+    ) -> Optional[PlatformContext]:
+        """Update platform context"""
+        context = await self._platform_context_repo.get_platform_context(context_id)
+        if not context:
+            return None
+
+        if learned_preferences:
+            context.learned_preferences.update(learned_preferences)
+        if custom_prompts:
+            context.custom_prompts.extend(custom_prompts)
+        if platform_conventions:
+            context.platform_conventions.update(platform_conventions)
+
+        context.version += 1
+        context.last_updated = datetime.utcnow()
+
+        return await self._platform_context_repo.update_platform_context(context)
+
+    async def add_interaction_to_platform_history(
+        self,
+        context_id: str,
+        interaction: Dict[str, Any]
+    ) -> bool:
+        """Add interaction to platform history"""
+        interaction["timestamp"] = datetime.utcnow().isoformat()
+        return await self._platform_context_repo.add_interaction_to_history(
+            context_id, interaction
+        )
+
+    async def get_platform_contexts_for_project(
+        self,
+        project_id: str
+    ) -> List[PlatformContext]:
+        """Get all platform contexts for project"""
+        return await self._platform_context_repo.get_platform_contexts_by_project(project_id)
+
+    async def query_context_with_hierarchy(
+        self,
+        project_id: str,
+        platform_type: str,
+        query_text: str,
+        include_global: bool = True,
+        include_platform: bool = True,
+        domains_filter: Optional[List[str]] = None,
+        max_results: int = 100
+    ) -> ContextResponse:
+        """Query context with global and platform hierarchy"""
+        start_time = datetime.utcnow()
+        results = []
+
+        # 1. Get platform context if requested
+        if include_platform:
+            platform_context = await self.get_platform_context(project_id, platform_type)
+            if platform_context:
+                platform_results = self._search_platform_context(
+                    platform_context, query_text, max_results // 3
+                )
+                results.extend(platform_results)
+
+        # 2. Get global context if requested
+        if include_global:
+            global_context = await self.get_global_context(project_id)
+            if global_context:
+                global_results = self._search_global_context(
+                    global_context, query_text, max_results // 3
+                )
+                results.extend(global_results)
+
+        # 3. Get domain contexts (existing functionality)
+        if domains_filter or not (include_platform or include_global):
+            domain_results = await self._search_structured_context(
+                project_id, query_text, domains_filter, max_results // 3
+            )
+            results.extend(domain_results)
+
+        # Process and deduplicate results
+        processed_results = await self._process_query_results(results, "structured")
+        processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
+
+        # Create and save query
+        query = ContextQuery(
+            query_text=query_text,
+            domains_filter=domains_filter or [],
+            response_format="structured",
+            max_results=max_results
+        )
+        await self._query_repo.save_query(query, project_id)
+
+        response = ContextResponse(
+            query_id=query.id,
+            results=processed_results[:max_results],
+            domains_found=list(set([r.get("source_type") for r in processed_results])),
+            total_results=len(processed_results),
+            processing_time_ms=processing_time
+        )
+
+        await self._query_repo.save_response(response, project_id)
+        return response
+
+    def _search_platform_context(
+        self,
+        platform_context: PlatformContext,
+        query: str,
+        limit: int
+    ) -> List[Dict[str, Any]]:
+        """Search in platform-specific context"""
+        results = []
+
+        # Search in platform-specific data
+        if query.lower() in str(platform_context.platform_specific_data).lower():
+            results.append({
+                "type": "platform_context",
+                "source_type": "platform",
+                "platform_type": platform_context.platform_type,
+                "content": platform_context.platform_specific_data,
+                "relevance_score": 0.9,
+                "context_id": platform_context.id
+            })
+
+        # Search in learned preferences
+        if query.lower() in str(platform_context.learned_preferences).lower():
+            results.append({
+                "type": "learned_preferences",
+                "source_type": "platform",
+                "platform_type": platform_context.platform_type,
+                "content": platform_context.learned_preferences,
+                "relevance_score": 0.8,
+                "context_id": platform_context.id
+            })
+
+        # Search in interaction history
+        for interaction in platform_context.interaction_history[-10:]:  # Last 10 interactions
+            if query.lower() in str(interaction).lower():
+                results.append({
+                    "type": "interaction_history",
+                    "source_type": "platform",
+                    "platform_type": platform_context.platform_type,
+                    "content": interaction,
+                    "relevance_score": 0.7,
+                    "context_id": platform_context.id
+                })
+
+        return results[:limit]
+
+    def _search_global_context(
+        self,
+        global_context: GlobalContext,
+        query: str,
+        limit: int
+    ) -> List[Dict[str, Any]]:
+        """Search in global context"""
+        results = []
+
+        # Search in shared knowledge
+        if query.lower() in str(global_context.shared_knowledge).lower():
+            results.append({
+                "type": "shared_knowledge",
+                "source_type": "global",
+                "content": global_context.shared_knowledge,
+                "relevance_score": 0.95,
+                "context_id": global_context.id
+            })
+
+        # Search in shared conventions
+        if query.lower() in str(global_context.shared_conventions).lower():
+            results.append({
+                "type": "shared_conventions",
+                "source_type": "global",
+                "content": global_context.shared_conventions,
+                "relevance_score": 0.9,
+                "context_id": global_context.id
+            })
+
+        # Search in common patterns
+        for pattern in global_context.common_patterns:
+            if query.lower() in pattern.lower():
+                results.append({
+                    "type": "common_pattern",
+                    "source_type": "global",
+                    "content": pattern,
+                    "relevance_score": 0.85,
+                    "context_id": global_context.id
+                })
+
+        return results[:limit]
