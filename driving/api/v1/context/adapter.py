@@ -6,6 +6,7 @@ import logging
 
 from application.services.context_service import ContextService
 from application.services.ai_orchestrator_service import AIOrchestrator
+from config.dependencies import get_context_service, get_ai_orchestrator
 from .schemas import (
     ProjectContextCreate,
     ProjectContextResponse,
@@ -57,7 +58,7 @@ class ContextAdapter:
     async def create_project_context(
         self,
         request: ProjectContextCreate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Create new project context"""
         try:
@@ -76,7 +77,7 @@ class ContextAdapter:
     async def get_project_context(
         self,
         project_id: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get project context by ID"""
         context = await context_service.get_project_context(project_id)
@@ -87,7 +88,7 @@ class ContextAdapter:
     @router.get("/projects", response_model=List[ProjectContextResponse])
     async def list_project_contexts(
         self,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """List all project contexts"""
         contexts = await context_service._context_repo.list_project_contexts()
@@ -100,7 +101,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: DomainContextCreate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Create domain context for project"""
         try:
@@ -120,7 +121,7 @@ class ContextAdapter:
     async def get_project_domains(
         self,
         project_id: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get all domains for project"""
         domains = await context_service._domain_repo.get_domains_by_project(project_id)
@@ -131,7 +132,7 @@ class ContextAdapter:
         self,
         project_id: str,
         domain_type: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get domain by type for project"""
         domain = await context_service._domain_repo.get_domain_by_type(project_id, domain_type)
@@ -144,7 +145,7 @@ class ContextAdapter:
         self,
         domain_id: str,
         request: DomainContextUpdate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Update domain context"""
         try:
@@ -176,7 +177,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: ContextQueryRequest,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Query project context"""
         try:
@@ -203,7 +204,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: AISessionCreate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Create AI session"""
         try:
@@ -221,7 +222,7 @@ class ContextAdapter:
     async def end_ai_session(
         self,
         session_id: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """End AI session"""
         session = await context_service.end_ai_session(session_id)
@@ -235,7 +236,7 @@ class ContextAdapter:
         project_id: str,
         ai_type: Optional[str] = Query(None),
         active_only: bool = Query(False),
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get AI sessions for project"""
         if active_only:
@@ -253,7 +254,7 @@ class ContextAdapter:
     async def register_ai(
         self,
         request: AICapabilitiesRequest,
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Register AI with UCL"""
         try:
@@ -280,7 +281,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: AIContextRequest,
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Handle context request from AI"""
         try:
@@ -309,7 +310,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: AIContextUpdate,
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Handle context update from AI"""
         try:
@@ -337,7 +338,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: AISubscriptionRequest,
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Subscribe AI to context updates"""
         try:
@@ -367,7 +368,7 @@ class ContextAdapter:
         self,
         project_id: str,
         days: int = Query(30, ge=1, le=365),
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get project analytics"""
         try:
@@ -383,7 +384,7 @@ class ContextAdapter:
         project_id: str,
         ai_type: Optional[str] = Query(None),
         days: int = Query(7, ge=1, le=365),
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Get AI analytics"""
         try:
@@ -398,7 +399,7 @@ class ContextAdapter:
         self,
         project_id: str,
         days: int = Query(7, ge=1, le=365),
-        ai_orchestrator: AIOrchestrator = Depends()
+        ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
     ):
         """Get collaboration insights"""
         try:
@@ -469,7 +470,7 @@ class ContextAdapter:
     async def get_global_context(
         self,
         project_id: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get global context for project"""
         global_context = await context_service.get_global_context(project_id)
@@ -482,7 +483,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: GlobalContextUpdate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Update global context"""
         try:
@@ -504,7 +505,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: MergeInsightsRequest,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Merge insights from platform to global context"""
         try:
@@ -528,7 +529,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: PlatformContextCreate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Create platform-specific context"""
         try:
@@ -551,7 +552,7 @@ class ContextAdapter:
     async def get_platform_contexts(
         self,
         project_id: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get all platform contexts for project"""
         contexts = await context_service.get_platform_contexts_for_project(project_id)
@@ -562,7 +563,7 @@ class ContextAdapter:
         self,
         project_id: str,
         platform_type: str,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Get platform context by type"""
         context = await context_service.get_platform_context(project_id, platform_type)
@@ -575,7 +576,7 @@ class ContextAdapter:
         self,
         context_id: str,
         request: PlatformContextUpdate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Update platform context"""
         try:
@@ -597,7 +598,7 @@ class ContextAdapter:
         self,
         context_id: str,
         request: InteractionCreate,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Add interaction to platform context history"""
         try:
@@ -624,7 +625,7 @@ class ContextAdapter:
         self,
         project_id: str,
         request: ContextQueryWithHierarchy,
-        context_service: ContextService = Depends()
+        context_service: ContextService = Depends(get_context_service)
     ):
         """Query context with global and platform hierarchy"""
         try:
@@ -677,20 +678,3 @@ class ContextAdapter:
             version=context.version
         )
 
-
-# Exception handlers
-@router.exception_handler(ValueError)
-async def value_error_handler(request, exc):
-    return JSONResponse(
-        status_code=400,
-        content=ErrorResponse(detail=str(exc), error_type="ValidationError").dict()
-    )
-
-
-@router.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    logger.error(f"Unexpected error: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content=ErrorResponse(detail="Internal server error", error_type="ServerError").dict()
-    )
