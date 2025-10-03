@@ -26,7 +26,8 @@ from django.urls import include, path
 from oauth2_provider import urls as oauth2_urls
 
 urlpatterns = [
-    path('users/admin/', admin.site.urls),
+    path('admin/', admin.site.urls),
+    path('users/admin/', admin.site.urls),  # Kept for backwards compatibility
     path("o/", include(oauth2_urls)),
     # path('api/', include('driving.api.urls')),
 ]

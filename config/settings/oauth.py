@@ -45,13 +45,13 @@ AUTHENTICATION_BACKENDS += [
 
 # https://developers.google.com/oauthplayground/
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
+#SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
+#SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
 
-APPLE_PRIVATE_KEY = BASE_DIR / os.environ.get('APPLE_PRIVATE_KEY')
+# APPLE_PRIVATE_KEY = BASE_DIR / os.environ.get('APPLE_PRIVATE_KEY')
 
 oauth2_settings.defaults['ALLOWED_REDIRECT_URI_SCHEMES'] = [
     'http',
     'https',
-    os.environ.get('APP_DEEP_LINK_DOMAIN'),
+    #os.environ.get('APP_DEEP_LINK_DOMAIN'),
 ]
